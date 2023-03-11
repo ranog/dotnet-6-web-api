@@ -4,28 +4,38 @@ var builder = WebApplication.CreateBuilder(args);
 var app = builder.Build();
 
 app.MapPost(
-    "save-product/",
-    (Product product) => ProductRepository.Add(product)
+    "products/",
+    (Product product) => {
+        ProductRepository.Add(product);
+        return Results.Created($"products/{product.Code}" , product.Code);
+    }
 );
 
 app.MapGet(
-    "get-product/{code}/",
-    ([FromRoute] string code) => ProductRepository.GetBy(code)
+    "products/{code}/",
+    ([FromRoute] string code) => {
+        var product = ProductRepository.GetBy(code);
+        if(product == null)
+            return Results.NotFound();
+        return Results.Ok(product);
+    }
 );
 
 app.MapPut(
-    "edit-product/",
+    "products/",
     (Product product) => {
         var productSaved = ProductRepository.GetBy(product.Code);
         productSaved.Name = product.Name;
+        return Results.Ok();
     }
 );
 
 app.MapDelete(
-    "delete-product/{code}",
+    "products/{code}",
     ([FromRoute] string code) => {
         var productSaved = ProductRepository.GetBy(code);
         ProductRepository.Remove(productSaved);
+        return Results.Ok();
     }
 );
 
@@ -48,7 +58,6 @@ public static class ProductRepository {
     public static void Remove(Product product){
         Products.Remove(product);
     }
-
 }
 
 
