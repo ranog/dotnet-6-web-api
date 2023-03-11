@@ -2,6 +2,9 @@ using Microsoft.AspNetCore.Mvc;
 
 var builder = WebApplication.CreateBuilder(args);
 var app = builder.Build();
+var configuration = app.Configuration;
+ProductRepository.Init(configuration);
+
 
 app.MapPost(
     "products/",
@@ -10,6 +13,7 @@ app.MapPost(
         return Results.Created($"products/{product.Code}" , product.Code);
     }
 );
+
 
 app.MapGet(
     "products/{code}/",
@@ -21,6 +25,7 @@ app.MapGet(
     }
 );
 
+
 app.MapPut(
     "products/",
     (Product product) => {
@@ -29,6 +34,7 @@ app.MapPut(
         return Results.Ok();
     }
 );
+
 
 app.MapDelete(
     "products/{code}",
@@ -39,25 +45,32 @@ app.MapDelete(
     }
 );
 
+
+if(app.Environment.IsStaging())
+    app.MapGet(
+        "configuration/database/",
+        (IConfiguration configuration) => {
+            return Results.Ok($"{configuration["database:connection"]}/{configuration["database:port"]}");
+        }
+    );
+
+
 app.Run();
 
+
 public static class ProductRepository {
-    public static List<Product> Products { get; set; }
+    public static List<Product> Products { get; set; } = Products = new List<Product>();
 
-    public static void Add(Product product){
-        if(Products == null)
-            Products = new List<Product>();
-
-        Products.Add(product);
+    public static void Init(IConfiguration configuration){
+        var products = configuration.GetSection("Products").Get<List<Product>>();
+        Products = products;
     }
 
-    public static Product GetBy(string code){
-        return Products.FirstOrDefault(p => p.Code == code);
-    }
+    public static void Add(Product product) => Products.Add(product);
 
-    public static void Remove(Product product){
-        Products.Remove(product);
-    }
+    public static Product GetBy(string code) => Products.FirstOrDefault(p => p.Code == code);
+
+    public static void Remove(Product product) => Products.Remove(product);
 }
 
 
