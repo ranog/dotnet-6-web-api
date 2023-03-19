@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
-builder.Services.AddDbContext<ApplicationDbContext>();
+builder.Services.AddSqlServer<ApplicationDbContext>(builder.Configuration["Database:SqlServer"]);
 
 var app = builder.Build();
 var configuration = app.Configuration;
@@ -11,17 +11,37 @@ ProductRepository.Init(configuration);
 
 app.MapPost(
     "products/",
-    (Product product) => {
-        ProductRepository.Add(product);
-        return Results.Created($"products/{product.Code}" , product.Code);
+    (ProductRequest productRequest, ApplicationDbContext context) => {
+        var category = context.Categories.Where(category => category.Id == productRequest.CategoryId).First();
+        var product =  new Product{
+            Code = productRequest.Code,
+            Name = productRequest.Name,
+            Description = productRequest.Description,
+            Category = category
+        };
+        if(productRequest.Tags != null){
+            product.Tags = new List<Tag>();
+            foreach (var item in productRequest.Tags)
+            {
+                product.Tags.Add(new Tag{Name = item});
+            }
+        }
+
+        context.Products.Add(product);
+        context.SaveChanges();
+        return Results.Created($"products/{product.Id}" , product.Id);
     }
 );
 
 
 app.MapGet(
-    "products/{code}/",
-    ([FromRoute] string code) => {
-        var product = ProductRepository.GetBy(code);
+    "products/{id}/",
+    ([FromRoute] int id, ApplicationDbContext context) => {
+        var product = context.Products
+            .Include(product => product.Category)
+            .Include(product => product.Tags)
+            .Where(product => product.Id == id).First();
+
         if(product == null)
             return Results.NotFound();
         return Results.Ok(product);
@@ -30,20 +50,38 @@ app.MapGet(
 
 
 app.MapPut(
-    "products/",
-    (Product product) => {
-        var productSaved = ProductRepository.GetBy(product.Code);
-        productSaved.Name = product.Name;
+    "products/{id}/",
+    ([FromRoute] int id, ProductRequest productRequest, ApplicationDbContext context) => {
+        var product = context.Products
+            .Include(product => product.Tags)
+            .Where(product => product.Id == id).First();
+        var category = context.Categories.Where(category => category.Id == productRequest.CategoryId).First();
+
+        product.Code = productRequest.Code;
+        product.Name = productRequest.Name;
+        product.Description = productRequest.Description;
+        product.Category = category;
+        if(productRequest.Tags != null){
+            product.Tags = new List<Tag>();
+            foreach (var item in productRequest.Tags)
+            {
+                product.Tags.Add(new Tag{Name = item});
+            }
+        }
+
+        context.SaveChanges();
         return Results.Ok();
     }
 );
 
 
 app.MapDelete(
-    "products/{code}",
-    ([FromRoute] string code) => {
-        var productSaved = ProductRepository.GetBy(code);
-        ProductRepository.Remove(productSaved);
+    "products/{id}",
+    ([FromRoute] int id, ApplicationDbContext context) => {
+        var product = context.Products.Where(product => product.Id == id).First();
+
+        context.Products.Remove(product);
+        context.SaveChanges();
         return Results.Ok();
     }
 );
@@ -59,59 +97,3 @@ if(app.Environment.IsStaging())
 
 
 app.Run();
-
-
-public static class ProductRepository {
-    public static List<Product> Products { get; set; } = Products = new List<Product>();
-
-    public static void Init(IConfiguration configuration){
-        var products = configuration.GetSection("Products").Get<List<Product>>();
-        Products = products;
-    }
-
-    public static void Add(Product product) => Products.Add(product);
-
-    public static Product GetBy(string code) => Products.FirstOrDefault(p => p.Code == code);
-
-    public static void Remove(Product product) => Products.Remove(product);
-}
-
-
-public class Category{
-    public int Id { get; set; }
-    public string Name { get; set; }
-}
-
-
-public class Tag{
-    public int Id { get; set; }
-    public string Name { get; set; }
-    public int ProductId { get; set; }
-}
-
-
-public class Product{
-    public int Id { get; set; }
-    public string Code { get; set; }
-    public string Name { get; set; }
-    public string Description { get; set; }
-    public int CategoryId { get; set; }
-    public Category Category { get; set; }
-    public List<Tag> Tags { get; set; }
-}
-
-
-public class ApplicationDbContext: DbContext{
-    public DbSet<Product> Products { get; set; }
-
-    protected override void OnModelCreating(ModelBuilder builder){
-        builder.Entity<Product>().Property(p => p.Code).HasMaxLength(20).IsRequired();
-        builder.Entity<Product>().Property(p => p.Name).HasMaxLength(120).IsRequired();
-        builder.Entity<Product>().Property(p => p.Description).HasMaxLength(500).IsRequired(false);
-    }
-
-    protected override void OnConfiguring(DbContextOptionsBuilder options)
-        => options.UseSqlServer(
-            "Server=localhost;Database=Products;User Id=sa;Password=@Sql2019;MultipleActiveResultSets=true;Encrypt=YES;TrustServerCertificate=YES"
-        );
-}
