@@ -1,6 +1,6 @@
 repos:
   - repo: https://github.com/dotnet/format
-    rev: 'v5.1.225507'  # Use a última revisão disponível
+    rev: v5.1.225507
     hooks:
-    - id: dotnet-format
-      entry: dotnet-format --fix-whitespace
+      - id: dotnet-format
+        entry: dotnet-format --fix-whitespace
